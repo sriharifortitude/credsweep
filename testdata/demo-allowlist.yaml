@@ -1,0 +1,6 @@
+allow:
+  - fingerprint: d3ebb4ad3038b0626a7c4fc81c741f330b4da2ebaee01709fd7f232e402ef7fc
+    reason: >-
+      "from-vault-at-runtime" is a placeholder saying the real value comes
+      from Vault at deploy time, not a leaked credential -- the generic
+      entropy rule can't tell the two apart, a human has to.
