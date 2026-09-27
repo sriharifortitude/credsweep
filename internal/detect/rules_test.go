@@ -152,3 +152,27 @@ func TestGenericHighEntropySecretRequiresBothANamedKeyAndEnoughEntropy(t *testin
 		t.Fatalf("got %+v, want no match without a secret-sounding key", unnamed)
 	}
 }
+
+func TestGenericRuleIgnoresAnUnquotedFunctionCall(t *testing.T) {
+	// Both lines are from a real Rust parser (bomdelta's licence
+	// expression evaluator) and were reported as secrets: a variable named
+	// like "token", assigned a call expression that clears the entropy bar.
+	for _, line := range []string{
+		`    let tokens = tokenize(expr);`,
+		`        let token = self.tokens.get(self.pos)?;`,
+		`const accessKey = loadAccessKey(process.env.REGION)`,
+	} {
+		if got := Scan(line); hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want no match for a function call", line, got)
+		}
+	}
+}
+
+func TestGenericRuleStillReportsAQuotedValueThatContainsParentheses(t *testing.T) {
+	// The call heuristic applies to unquoted code only; a string literal is
+	// a value no matter what characters it contains.
+	got := Scan(`db_password = "Summer2024(x)Qz9!vK"`)
+	if !hasID(got, genericSecretID) {
+		t.Fatalf("got %+v, want %s for a quoted password", got, genericSecretID)
+	}
+}

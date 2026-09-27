@@ -59,7 +59,13 @@ the allowlist entry exists to accept.)
 | `google-api-key` | High | a Google API key (`AIza...`) |
 | `private-key-block` | Critical | a PEM private key block |
 | `jwt` | High | a JSON Web Token |
-| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it |
+| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. An unquoted function call (`let tokens = tokenize(expr);`) is code, not a value, and is skipped; a quoted string is always checked |
+
+v0.1.0's generic rule reported function calls assigned to variables
+named like `token`. That surfaced the first time credsweep ran over
+another repo's real source
+([bomdelta](https://github.com/sriharifortitude/bomdelta)'s Rust parser),
+and was fixed in v0.1.1 with a regression test built from those lines.
 
 Every finding names the exact commit, author, date, file and line a
 secret was added on -- and never the secret itself. See

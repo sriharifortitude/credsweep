@@ -22,6 +22,13 @@ var placeholderValue = regexp.MustCompile(
 	`(?i)^(changeme|change_me|placeholder|xxx+|todo|fixme|example|dummy|redacted|fake|sample|test|your[_-]?(api[_-]?)?key([_-]?here)?|\*+|<[^>]*>|\$\{[^}]*\}|\$\([^)]*\))$`,
 )
 
+// callExpression matches an unquoted value that is code, not data: an
+// identifier or dotted path followed by a parenthesised argument list,
+// optionally trailed by the ?, ; or ! that end a statement. A real
+// credential in source is a string literal or a bare base64/hex blob,
+// never `tokenize(expr);`.
+var callExpression = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\(.*\)[?;!,]*$`)
+
 // minEntropyBits is the Shannon entropy floor, in bits per character, a
 // candidate value must clear to be reported. Base64/hex secrets of
 // realistic length comfortably clear 4; English words and repeated
@@ -41,9 +48,14 @@ func (genericSecretRule) Description() string {
 
 func (genericSecretRule) Find(line string) []Match {
 	var out []Match
-	for _, sm := range genericSecretPattern.FindAllStringSubmatch(line, -1) {
-		val := sm[1]
+	for _, loc := range genericSecretPattern.FindAllStringSubmatchIndex(line, -1) {
+		start, end := loc[2], loc[3]
+		val := line[start:end]
 		if placeholderValue.MatchString(strings.TrimSpace(val)) {
+			continue
+		}
+		quoted := start > 0 && (line[start-1] == '"' || line[start-1] == '\'')
+		if !quoted && callExpression.MatchString(val) {
 			continue
 		}
 		if shannonEntropy(val) < minEntropyBits {
