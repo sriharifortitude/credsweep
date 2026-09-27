@@ -176,3 +176,39 @@ func TestGenericRuleStillReportsAQuotedValueThatContainsParentheses(t *testing.T
 		t.Fatalf("got %+v, want %s for a quoted password", got, genericSecretID)
 	}
 }
+
+func TestGenericRuleIgnoresUnquotedReferences(t *testing.T) {
+	// From a real Terraform module (terraform-aws-hookrelay): an attribute
+	// named like a secret, assigned a reference to where the secret comes
+	// from. A reference is code; a leaked credential is a literal.
+	for _, line := range []string{
+		`  password_wo         = ephemeral.random_password.db.result`,
+		`  secret_string_wo_version = var.credentials_version`,
+		`  secret_id                = aws_secretsmanager_secret.database_url.id`,
+		`      secrets          = [local.secrets[0]]`,
+	} {
+		if got := Scan(line); hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want no match for a reference", line, got)
+		}
+	}
+}
+
+func TestGenericRuleIgnoresAURLWhosePasswordIsInterpolated(t *testing.T) {
+	line := `  secret_string_wo = "postgresql://${local.db_username}:${ephemeral.random_password.db.result}@${aws_db_instance.this.address}:5432/hookrelay?sslmode=require"`
+	if got := Scan(line); hasID(got, genericSecretID) {
+		t.Errorf("got %+v, want no match: every credential part is ${...}", got)
+	}
+}
+
+func TestGenericRuleStillReportsLiteralSecretsNextToInterpolation(t *testing.T) {
+	for _, line := range []string{
+		// literal password, interpolated host
+		`database_password_url = "postgresql://app:Xk9vQm2Lp7Rt4Wz8@${var.host}:5432/app"`,
+		// an unquoted bare base64 value is data, not a reference
+		`api_token = QWxhZGRpbjpvcGVuIHNlc2FtZQ9xZk3`,
+	} {
+		if got := Scan(line); !hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want %s", line, got, genericSecretID)
+		}
+	}
+}

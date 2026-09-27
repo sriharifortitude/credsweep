@@ -59,13 +59,26 @@ the allowlist entry exists to accept.)
 | `google-api-key` | High | a Google API key (`AIza...`) |
 | `private-key-block` | Critical | a PEM private key block |
 | `jwt` | High | a JSON Web Token |
-| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. An unquoted function call (`let tokens = tokenize(expr);`) is code, not a value, and is skipped; a quoted string is always checked |
+| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. Unquoted code is skipped: a function call (`tokenize(expr);`) or a reference (`var.db_password`, `local.secrets[0]`). So is a URL whose password is entirely `${...}` interpolation. A quoted literal is always checked, and a literal password next to an interpolated host is still reported |
 
-v0.1.0's generic rule reported function calls assigned to variables
-named like `token`. That surfaced the first time credsweep ran over
-another repo's real source
-([bomdelta](https://github.com/sriharifortitude/bomdelta)'s Rust parser),
-and was fixed in v0.1.1 with a regression test built from those lines.
+The generic rule's precision came from running it on real code, not from
+guessing:
+
+- **v0.1.1:** v0.1.0 reported function calls assigned to variables named
+  like `token`. That surfaced the first time credsweep scanned another
+  repo's source ([bomdelta](https://github.com/sriharifortitude/bomdelta)'s
+  Rust parser).
+- **v0.1.2:** scanning a real Terraform module
+  ([terraform-aws-hookrelay](https://github.com/sriharifortitude/terraform-aws-hookrelay))
+  produced 14 findings, all references (`password_wo =
+  ephemeral.random_password.db.result`) or connection URLs built entirely
+  from interpolation. None were secrets; the module now scans clean. The
+  same fix removed one false positive from hookrelay
+  (`secrets: delivery.endpoint.secrets`).
+
+Both fixes carry regression tests built from those exact lines, plus
+tests that the literal secrets around them are still caught. The demo
+above is unchanged by both.
 
 Every finding names the exact commit, author, date, file and line a
 secret was added on -- and never the secret itself. See
