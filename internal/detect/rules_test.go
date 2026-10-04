@@ -193,6 +193,34 @@ func TestGenericRuleIgnoresUnquotedReferences(t *testing.T) {
 	}
 }
 
+func TestGenericRuleIgnoresATypeAnnotation(t *testing.T) {
+	// From pgwarden's Role struct: a field named like a secret, whose value
+	// is its type. credsweep v0.1.2 reported `Option<String>,` as a secret.
+	for _, line := range []string{
+		`    pub password: Option<String>,`,
+		`    pub api_token: Option<Vec<String>>,`,
+		`    secret_map: HashMap<String,String>;`,
+		`  access_key: Option<&'static str>,`,
+	} {
+		if got := Scan(line); hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want no match for a type annotation", line, got)
+		}
+	}
+}
+
+func TestGenericRuleTypeHeuristicDoesNotHideACredential(t *testing.T) {
+	for _, line := range []string{
+		`db_password = "Summer2024<x>Qz9!vKw"`,      // quoted: a value whatever it contains
+		`PASSWORD=zm9vYmFyYmF6cXV4MTIzNDU2NzhBQg==`, // unquoted base64
+		`api_token: ghx<9fQ2LmZpT4vKw8Nb>`,          // a lowercase first letter is not a type
+		`token = Abc$9fQ2LmZpT4vKw8NbXr<Qz>`,        // not made only of type characters
+	} {
+		if got := Scan(line); !hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want %s", line, got, genericSecretID)
+		}
+	}
+}
+
 func TestGenericRuleIgnoresAURLWhosePasswordIsInterpolated(t *testing.T) {
 	line := `  secret_string_wo = "postgresql://${local.db_username}:${ephemeral.random_password.db.result}@${aws_db_instance.this.address}:5432/hookrelay?sslmode=require"`
 	if got := Scan(line); hasID(got, genericSecretID) {

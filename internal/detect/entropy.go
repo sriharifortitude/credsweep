@@ -37,12 +37,20 @@ var callExpression = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\(.*\)[?;!,]*$`
 // never have; JWTs, which do have dots, are caught by their own rule first.
 var referenceExpression = regexp.MustCompile(`^\[?[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*|\[[^\]]*\])+\]?[;,]*$`)
 
+// typeExpression matches an unquoted value that is a type annotation: a
+// capitalised generic such as `Option<String>,` or `Vec<Option<Token>>;`
+// (a struct field, a TypeScript interface member, a Java field). It needs a
+// capital first letter and only type-ish characters inside the angle
+// brackets, so a literal secret that happens to contain `<` and `>` (and
+// would normally be quoted) is not caught by it.
+var typeExpression = regexp.MustCompile(`^[&*]?[A-Z][A-Za-z0-9_:]*<[A-Za-z0-9_:,&*<>\[\]']+>[?,;]*$`)
+
 // interpolation is a ${...} template expression (Terraform, shell, JS).
 var interpolation = regexp.MustCompile(`\$\{[^}]*\}`)
 
 // codeNotData reports an unquoted value that is an expression, not a literal.
 func codeNotData(val string) bool {
-	return callExpression.MatchString(val) || referenceExpression.MatchString(val)
+	return callExpression.MatchString(val) || referenceExpression.MatchString(val) || typeExpression.MatchString(val)
 }
 
 // secretComesFromInterpolation reports a templated value whose literal text,
