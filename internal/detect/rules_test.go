@@ -161,6 +161,12 @@ func TestGenericRuleIgnoresAnUnquotedFunctionCall(t *testing.T) {
 		`    let tokens = tokenize(expr);`,
 		`        let token = self.tokens.get(self.pos)?;`,
 		`const accessKey = loadAccessKey(process.env.REGION)`,
+		// The value is cut at the first space, so a call whose arguments contain
+		// spaces reaches the rule without its closing parenthesis. These are
+		// from cspwarden (C#), bailey (TypeScript) and gatelimit (Go).
+		`            var tokens = AsciiWhitespace().Split(piece.Trim()).Where(t => t.Length > 0).ToList();`,
+		`  const currentPassword = formString(formData, 'currentPassword');`,
+		`		tokens = math.Min(burst, tokens+elapsed*rate)`,
 	} {
 		if got := Scan(line); hasID(got, genericSecretID) {
 			t.Errorf("%q: got %+v, want no match for a function call", line, got)

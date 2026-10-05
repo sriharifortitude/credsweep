@@ -27,7 +27,12 @@ var placeholderValue = regexp.MustCompile(
 // optionally trailed by the ?, ; or ! that end a statement. A real
 // credential in source is a string literal or a bare base64/hex blob,
 // never `tokenize(expr);`.
-var callExpression = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\(.*\)[?;!,]*$`)
+//
+// The closing parenthesis is not required: the value is cut at the first
+// space, so `Split(piece.Trim()).Where(t => t.Length > 0)` reaches this rule
+// as `Split(piece.Trim()).Where(t`. An unquoted value that opens with
+// `identifier(` is code either way.
+var callExpression = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\(`)
 
 // referenceExpression matches an unquoted value that names where a value
 // comes from rather than being one: an identifier followed by at least one
