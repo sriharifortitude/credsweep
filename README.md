@@ -59,7 +59,7 @@ the allowlist entry exists to accept.)
 | `google-api-key` | High | a Google API key (`AIza...`) |
 | `private-key-block` | Critical | a PEM private key block |
 | `jwt` | High | a JSON Web Token |
-| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. Unquoted code is skipped: a function call (`tokenize(expr);`) or a reference (`var.db_password`, `local.secrets[0]`). So is a URL whose password is entirely `${...}` interpolation. A quoted literal is always checked, and a literal password next to an interpolated host is still reported |
+| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. Unquoted code is skipped: a function call (`tokenize(expr);`), a reference (`var.db_password`, `local.secrets[0]`) or a type annotation (`Option<String>`). So are an unquoted file path, sudoers' `NOPASSWD:` and `PASSWD:` tags, and a URL whose password is entirely `${...}` interpolation. A quoted literal is always checked, and a literal password next to an interpolated host is still reported |
 
 The generic rule's precision came from running it on real code, not from
 guessing:
@@ -76,9 +76,20 @@ guessing:
   same fix removed one false positive from hookrelay
   (`secrets: delivery.endpoint.secrets`).
 
-Both fixes carry regression tests built from those exact lines, plus
-tests that the literal secrets around them are still caught. The demo
-above is unchanged by both.
+- **v0.1.3:** scanning [pgwarden](https://github.com/sriharifortitude/pgwarden)'s
+  Rust source reported a struct field's type (`pub password: Option<String>,`)
+  as a secret, and a chained call that the value's first space had cut short
+  (`Split(piece.Trim()).Where(t`) slipped past the call check.
+- **v0.1.4:** scanning [sudowarden](https://github.com/sriharifortitude/sudowarden)'s
+  sudoers fixtures reported three lines. "passwd" inside the `NOPASSWD:` tag
+  looked like a key, and the "values" were a tag list
+  (`NOEXEC:/usr/bin/vi,`) and a command path (`/home/monitor/bin/check_disk`).
+  Unquoted file paths are now skipped, unless most of their segments contain
+  capital letters, which is how random base64 with slashes in it looks.
+
+Each fix carries regression tests built from those exact lines, plus tests
+that the literal secrets around them are still caught. The demo above is
+unchanged by all of them.
 
 Every finding names the exact commit, author, date, file and line a
 secret was added on -- and never the secret itself. See

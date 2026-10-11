@@ -227,6 +227,34 @@ func TestGenericRuleTypeHeuristicDoesNotHideACredential(t *testing.T) {
 	}
 }
 
+func TestGenericRuleIgnoresSudoersTagsAndPaths(t *testing.T) {
+	// From sudowarden's fixtures: sudoers tags contain "PASSWD" and a colon.
+	// credsweep v0.1.3 reported the tag list and the command path as secrets.
+	for _, line := range []string{
+		`alice ALL = NOPASSWD:NOEXEC:/usr/bin/vi, CWD=/srv /usr/bin/id`,
+		`monitor ALL=(root) NOPASSWD: /home/monitor/bin/check_disk`,
+		`deploy  ALL=(root) PASSWD: /usr/local/sbin/rotate-logs.sh`,
+		`backup_password_file = /etc/backup/credentials/db.pass`,
+	} {
+		if got := Scan(line); hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want no match", line, got)
+		}
+	}
+}
+
+func TestGenericRulePathAndTagHeuristicsDoNotHideACredential(t *testing.T) {
+	for _, line := range []string{
+		`password = /Xk9Q/Lm2Zp/T4vKw8NbR`,          // slashes, but every piece is capitalised: base64-like
+		`PASSWORD="/opt/k7lmzpt4vkw8nbr/q9xq2f"`,    // quoted: a value, whatever it looks like
+		`db_passwd: Zm9vYmFyYmF6cXV4MTIzNDU2NzhBQg`, // a passwd key that is not a sudoers tag
+		`NOPASSWD_TOKEN=Zm9vYmFyYmF6cXV4MTIzNDU2NzhBQg`,
+	} {
+		if got := Scan(line); !hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want %s", line, got, genericSecretID)
+		}
+	}
+}
+
 func TestGenericRuleIgnoresAURLWhosePasswordIsInterpolated(t *testing.T) {
 	line := `  secret_string_wo = "postgresql://${local.db_username}:${ephemeral.random_password.db.result}@${aws_db_instance.this.address}:5432/hookrelay?sslmode=require"`
 	if got := Scan(line); hasID(got, genericSecretID) {

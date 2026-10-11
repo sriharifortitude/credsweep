@@ -50,6 +50,41 @@ var referenceExpression = regexp.MustCompile(`^\[?[A-Za-z_][A-Za-z0-9_]*(\.[A-Za
 // would normally be quoted) is not caught by it.
 var typeExpression = regexp.MustCompile(`^[&*]?[A-Z][A-Za-z0-9_:]*<[A-Za-z0-9_:,&*<>\[\]']+>[?,;]*$`)
 
+// filePath matches an unquoted absolute path: two or more segments of
+// word characters, dots and dashes. A path is reported only if most of its
+// segments contain a capital letter, which random base64 that happens to
+// contain slashes almost always does and file paths almost never do. Found
+// by scanning sudoers files, where `NOPASSWD: /home/monitor/bin/check_disk`
+// reached this rule as a "password" with a path for its value.
+var filePath = regexp.MustCompile(`^(/[A-Za-z0-9._-]+){2,}/?[,;]*$`)
+
+func looksLikeFilePath(val string) bool {
+	if !filePath.MatchString(val) {
+		return false
+	}
+	segments := strings.Split(strings.Trim(val, "/,;"), "/")
+	capitalised := 0
+	for _, s := range segments {
+		if strings.ToLower(s) != s {
+			capitalised++
+		}
+	}
+	return capitalised*2 < len(segments)
+}
+
+// sudoersTag reports the NOPASSWD: and PASSWD: tags of a sudoers rule, which
+// contain "passwd" and a colon but assign nothing.
+func sudoersTag(line string, keyStart int) bool {
+	for _, tag := range []string{"NOPASSWD:", "PASSWD:"} {
+		for _, at := range []int{keyStart, keyStart - 2} {
+			if at >= 0 && strings.HasPrefix(line[at:], tag) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // interpolation is a ${...} template expression (Terraform, shell, JS).
 var interpolation = regexp.MustCompile(`\$\{[^}]*\}`)
 
@@ -105,7 +140,10 @@ func (genericSecretRule) Find(line string) []Match {
 			continue
 		}
 		quoted := start > 0 && (line[start-1] == '"' || line[start-1] == '\'')
-		if !quoted && codeNotData(val) {
+		if !quoted && (codeNotData(val) || looksLikeFilePath(val)) {
+			continue
+		}
+		if sudoersTag(line, loc[0]) {
 			continue
 		}
 		if secretComesFromInterpolation(val) {
