@@ -59,7 +59,7 @@ the allowlist entry exists to accept.)
 | `google-api-key` | High | a Google API key (`AIza...`) |
 | `private-key-block` | Critical | a PEM private key block |
 | `jwt` | High | a JSON Web Token |
-| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. Unquoted code is skipped: a function call (`tokenize(expr);`), a reference (`var.db_password`, `local.secrets[0]`) or a type annotation (`Option<String>`). So are an unquoted file path, sudoers' `NOPASSWD:` and `PASSWD:` tags, and a URL whose password is entirely `${...}` interpolation. A quoted literal is always checked, and a literal password next to an interpolated host is still reported |
+| `generic-high-entropy-secret` | Medium | a high-entropy value assigned to a variable named like a secret, when no more specific rule already caught it. Unquoted code is skipped: a function call (`tokenize(expr);`, or a list starting with one), a reference (`var.db_password`, `local.secrets[0]`) or a type annotation (`Option<String>`, Python's `list[Token]`). So are an unquoted file path, sudoers' `NOPASSWD:` and `PASSWD:` tags, and a URL whose password is entirely `${...}` interpolation. A quoted literal is always checked, and a literal password next to an interpolated host is still reported |
 
 The generic rule's precision came from running it on real code, not from
 guessing:

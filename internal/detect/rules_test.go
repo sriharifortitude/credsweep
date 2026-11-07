@@ -214,12 +214,33 @@ func TestGenericRuleIgnoresATypeAnnotation(t *testing.T) {
 	}
 }
 
+func TestGenericRuleIgnoresPythonTypesAndListsOfCalls(t *testing.T) {
+	// From rulefire (Python): a parameter named "tokens" annotated with a
+	// subscripted type, and a keyword argument whose value is a list holding a
+	// call. credsweep v0.1.4 reported both, and rulefire had to allowlist them.
+	for _, line := range []string{
+		`def literal(tokens: list[Token]) -> str:`,
+		`def _windash(tokens: list[Token]) -> list[list[Token]]:`,
+		`            values = [Value(tokens=[base64.b64encode(_bytes(v)).decode()]) for v in values]`,
+		`    password_hashes: dict[str, bytes] = {}`,
+		`    api_token: Optional[str] = None`,
+		`    tokens = (tokenize(line), 0)`,
+	} {
+		if got := Scan(line); hasID(got, genericSecretID) {
+			t.Errorf("%q: got %+v, want no match for code", line, got)
+		}
+	}
+}
+
 func TestGenericRuleTypeHeuristicDoesNotHideACredential(t *testing.T) {
 	for _, line := range []string{
 		`db_password = "Summer2024<x>Qz9!vKw"`,      // quoted: a value whatever it contains
 		`PASSWORD=zm9vYmFyYmF6cXV4MTIzNDU2NzhBQg==`, // unquoted base64
 		`api_token: ghx<9fQ2LmZpT4vKw8Nb>`,          // a lowercase first letter is not a type
 		`token = Abc$9fQ2LmZpT4vKw8NbXr<Qz>`,        // not made only of type characters
+		`token = vK8[pQ2+LmZpT4vKw8Nb/=]`,           // base64 characters inside the brackets
+		`password=Tr0ub4dor&3[Xq9!vKw]`,             // not made only of identifiers
+		`secret: "list[9fQ2LmZpT4vKw8Nb]"`,          // quoted
 	} {
 		if got := Scan(line); !hasID(got, genericSecretID) {
 			t.Errorf("%q: got %+v, want %s", line, got, genericSecretID)

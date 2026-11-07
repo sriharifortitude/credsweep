@@ -32,7 +32,10 @@ var placeholderValue = regexp.MustCompile(
 // space, so `Split(piece.Trim()).Where(t => t.Length > 0)` reaches this rule
 // as `Split(piece.Trim()).Where(t`. An unquoted value that opens with
 // `identifier(` is code either way.
-var callExpression = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\(`)
+//
+// A list or tuple that opens with a call is code too:
+// `tokens=[base64.b64encode(...)]` in Python, found in rulefire.
+var callExpression = regexp.MustCompile(`^[\[(]?[A-Za-z_][A-Za-z0-9_.]*\(`)
 
 // referenceExpression matches an unquoted value that names where a value
 // comes from rather than being one: an identifier followed by at least one
@@ -40,7 +43,10 @@ var callExpression = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\(`)
 // `local.secrets[0]`), optionally wrapped in a list's brackets. It needs a
 // dot or bracket after the first identifier, which base64 and hex secrets
 // never have; JWTs, which do have dots, are caught by their own rule first.
-var referenceExpression = regexp.MustCompile(`^\[?[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*|\[[^\]]*\])+\]?[;,]*$`)
+// An index holds a number or a key, never base64's `+`, `/` or `=`. Up to
+// v0.1.4 any index was accepted, so base64 written as an identifier followed
+// by a bracketed blob went unreported; rules_test.go has the case.
+var referenceExpression = regexp.MustCompile(`^\[?[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*|\[[A-Za-z0-9_"'-]*\])+\]?[;,]*$`)
 
 // typeExpression matches an unquoted value that is a type annotation: a
 // capitalised generic such as `Option<String>,` or `Vec<Option<Token>>;`
@@ -49,6 +55,13 @@ var referenceExpression = regexp.MustCompile(`^\[?[A-Za-z_][A-Za-z0-9_]*(\.[A-Za
 // brackets, so a literal secret that happens to contain `<` and `>` (and
 // would normally be quoted) is not caught by it.
 var typeExpression = regexp.MustCompile(`^[&*]?[A-Z][A-Za-z0-9_:]*<[A-Za-z0-9_:,&*<>\[\]']+>[?,;]*$`)
+
+// subscriptedType matches a Python type annotation, `list[Token])` or
+// `dict[str,` (the value is cut at the first space), found in rulefire. Only
+// identifiers may sit inside the brackets, so base64 with `+`, `/` or `=` in
+// it is still reported. A secret made only of letters and digits and written
+// unquoted as `name[secret]` would be skipped; nothing seen so far looks so.
+var subscriptedType = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*\[[A-Za-z_][A-Za-z0-9_.]*([,|\[\]]+[A-Za-z_][A-Za-z0-9_.]*)*[,\]]*[)\],:;=]*$`)
 
 // filePath matches an unquoted absolute path: two or more segments of
 // word characters, dots and dashes. A path is reported only if most of its
@@ -90,7 +103,8 @@ var interpolation = regexp.MustCompile(`\$\{[^}]*\}`)
 
 // codeNotData reports an unquoted value that is an expression, not a literal.
 func codeNotData(val string) bool {
-	return callExpression.MatchString(val) || referenceExpression.MatchString(val) || typeExpression.MatchString(val)
+	return callExpression.MatchString(val) || referenceExpression.MatchString(val) || typeExpression.MatchString(val) ||
+		subscriptedType.MatchString(val)
 }
 
 // secretComesFromInterpolation reports a templated value whose literal text,
